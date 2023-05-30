@@ -15,7 +15,7 @@ import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
-from subprocess import Popen
+from subprocess import Popen, PIPE
 
 now_dir = os.getcwd()
 sys.path.append(now_dir)
@@ -65,7 +65,7 @@ def train_monitor():
 def resample_dateset(dates):
     result = ["开始数据采样..."]
     yield "\n".join(result)
-    p = Popen("python resample.py", shell=True, encoding='utf-8')
+    p = Popen("python resample.py", shell=True, stdout=PIPE, stderr=PIPE, encoding='utf-8')
     while True:
         out = p.stdout.readline()
         if out == '' and p.poll() is not None:
@@ -206,19 +206,19 @@ with gr.Blocks() as app:
                     with gr.Column():
                         f0_predictor_out = gr.Textbox(label="运行结果", lines=3, max_lines=3)
                 f0_predictor_btn.click(f0_predict, f0_predictor_radio, f0_predictor_out)
+            # with gr.Group(visible=False):
+            #     gr.Markdown(value="Step 4. (可选) 训练 Diffusion Model")
+            #     with gr.Row():
+            #         with gr.Column():
+            #             with gr.Row():
+            #                 train_diffusion_btn = gr.Button("训练 Diffusion Model")
+            #                 train_diffusion_clear_btn = gr.Button("清除")
+            #         with gr.Column():
+            #             train_diffusion_out = gr.Textbox(label="Diffusion Model 模型训练结果", lines=5, max_lines=5)
+            #         train_diffusion_btn.click(train_diffusion_model, None, train_diffusion_out)
+            #         train_diffusion_clear_btn.click(lambda: None, None, train_diffusion_out)
             with gr.Group():
-                gr.Markdown(value="Step 4. (可选) 训练 Diffusion Model")
-                with gr.Row():
-                    with gr.Column():
-                        with gr.Row():
-                            train_diffusion_btn = gr.Button("训练 Diffusion Model")
-                            train_diffusion_clear_btn = gr.Button("清除")
-                    with gr.Column():
-                        train_diffusion_out = gr.Textbox(label="Diffusion Model 模型训练结果", lines=5, max_lines=5)
-                    train_diffusion_btn.click(train_diffusion_model, None, train_diffusion_out)
-                    train_diffusion_clear_btn.click(lambda: None, None, train_diffusion_out)
-            with gr.Group():
-                gr.Markdown(value="Step 5. 训练 Sovits Model")
+                gr.Markdown(value="Step 4. 训练 Sovits Model")
                 with gr.Row():
                     with gr.Column(scale=1):
                         with gr.Row():
