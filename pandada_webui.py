@@ -108,8 +108,8 @@ def train_sovits_model(total_epoch, batch_size):
         config = json.load(f)
     config["train"]["epochs"] = int(total_epoch)
     config["train"]["batch_size"] = int(batch_size)
-    time_now = datetime.now().strftime("%m-%d_%H-%M-%S")
-    config_file = f"config_{time_now}.json"
+    # time_now = datetime.now().strftime("%m-%d_%H-%M-%S")
+    config_file = "config.json"
     with open(Path(f"./configs/{config_file}"), mode='w') as f:
         json.dump(config, f)
     p = Popen(f"python train.py -c configs/{config_file} -m 44k", shell=True)
@@ -118,6 +118,7 @@ def train_sovits_model(total_epoch, batch_size):
 
 def covert_audio(model, audio_file, speaker):
     raw_dir = Path("./raw")
+    # audio_file = Path(audio_file)
     filename = Path(audio_file.name).name
     print(filename)
     if not raw_dir.exists():
@@ -130,13 +131,13 @@ def covert_audio(model, audio_file, speaker):
     p = Popen(cmd, shell=True)
     p.wait()
     result.append("结束音色迁移, 请查看转换后文件.")
-    yield str(raw_dir / filename), "\n".join(result)
+    yield str(Path("./results") / f"{filename}_0key_{speaker}_sovits.wav"), "\n".join(result)
 
 
 def upload_dataset(upload, dataset_name):
     if dataset_name == "":
         return
-    dataset = Path("./dataset") / dataset_name
+    dataset = Path("./dataset_raw") / dataset_name
     if not dataset.exists():
         dataset.mkdir(parents=True)
     for audio in upload:
@@ -152,6 +153,11 @@ def get_dataset_info():
     return "\n".join([f"Speaker: {d[0]}, 语料数量: {d[1]}" for d in dataset_info])
 
 
+def get_models():
+    models = [pt.stem for pt in Path("./logs/44k").glob('*.pth') if pt.name.startswith("G_")]
+    return {"choices": models, "__type__": "update"}
+
+
 with gr.Blocks() as app:
     with gr.Row(variant='panel').style(equal_height=True):
         with gr.Column(scale=1, min_width=80):
@@ -159,7 +165,7 @@ with gr.Blocks() as app:
         with gr.Column(scale=30):
             gr.Markdown(
                 """
-                # 小白 Music Box (SVC)
+                # 小白 Music Box (SoVITS)
                 ##### Pandada Game 语音生成试验盒.
                 """)
     with gr.Tabs():
@@ -224,7 +230,7 @@ with gr.Blocks() as app:
                         with gr.Row():
                             total_epoch = gr.Slider(
                                 minimum=0,
-                                maximum=2000,
+                                maximum=20000,
                                 step=20,
                                 label="总训练轮数total_epoch",
                                 value=200,
@@ -250,11 +256,14 @@ with gr.Blocks() as app:
             with gr.Group():
                 with gr.Row():
                     with gr.Column():
+                        # input_audio_file = gr.Audio(label="添加待转换音频", type="filepath")
                         input_audio_file = gr.File(label="添加待转换音频")
-                        models = [pt.stem for pt in Path("./logs/44k").glob('*.pth') if pt.name.startswith("G_")]
-                        svc_model = gr.Dropdown(models, label="SVC 模型")
-                        speakers = [f.name for f in Path("./dataset/44k").iterdir() if f.is_dir()]
-                        speaker_name = gr.Dropdown(speakers, label="转换目标Speaker(文件夹 dataset_raw 中的子文件夹)")
+                        refresh_model_btn = gr.Button("刷新模型")
+                        with gr.Row():
+                            svc_model = gr.Dropdown(label="SVC 模型", choices=[""])
+                            speakers = [f.name for f in Path("./dataset/44k").iterdir() if f.is_dir()]
+                            speaker_name = gr.Dropdown(speakers, label="转换目标Speaker(文件夹 dataset_raw 中的子文件夹)")
+                            refresh_model_btn.click(get_models, None, svc_model)
                         with gr.Row():
                             covert_btn = gr.Button("转换", variant="primary")
                             covert_clear_btn = gr.Button("清除", variant="primary")
