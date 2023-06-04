@@ -305,7 +305,7 @@ with gr.Blocks(
         debug_button.change(debug_change,[],[])
         model_load_button.click(modelAnalysis,[model_path,config_path,cluster_model_path,device,enhance],[sid,sid_output])
         model_unload_button.click(modelUnload,[],[sid,sid_output])
-    app.launch()
+    app.launch(server_name="0.0.0.0", server_port=7866)
 
 
  

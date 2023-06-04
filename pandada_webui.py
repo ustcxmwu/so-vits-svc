@@ -230,8 +230,8 @@ with gr.Blocks() as app:
                         with gr.Row():
                             total_epoch = gr.Slider(
                                 minimum=0,
-                                maximum=20000,
-                                step=20,
+                                maximum=50000,
+                                step=100,
                                 label="总训练轮数total_epoch",
                                 value=200,
                                 interactive=True,
@@ -288,5 +288,6 @@ if __name__ == '__main__':
         server_name="0.0.0.0",
         server_port=7866,
         quiet=True,
+        # root_path="./"
     )
     collector.join()
