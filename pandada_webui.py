@@ -177,7 +177,7 @@ def covert_audio(experiment, model, audio_file, speaker, enhance, auto_f0, f0_pr
     p = Popen(cmd, shell=True)
     p.wait()
     result.append("结束音色迁移, 请查看转换后文件.")
-    yield str(Path("./results") / f"{filename}_0key_{speaker}_sovits.wav"), "\n".join(result)
+    yield str(Path("./results") / f"{filename}_{int(vc_transform)}key_{speaker}_sovits.wav"), "\n".join(result)
 
 
 def upload_dataset(upload, dataset_name):
@@ -264,11 +264,11 @@ with gr.Blocks() as app:
                                     batch_size_1 = gr.Slider(minimum=1, maximum=40, step=1, label="batch_size", value=16,
                                                            interactive=True, )
                                 with gr.Row():
-                                    eval_interval_1 = gr.Textbox(label="每隔多少 step 生成一次评估日志", lines=1)
-                                    model_save_interval_1 = gr.Textbox(label="每隔多少 step 验证并保存一次模型", value="800",
-                                                                     lines=1)
-                                    keep_ckpts_1 = gr.Textbox(label="保存最近的多少个模型", value="5", lines=1)
-                                    learning_rate_1 = gr.Textbox(label="学习率(推荐 batch size 1/60000)")
+                                    eval_interval_1 = gr.Number(label="每隔多少 step 生成一次评估日志", value=200, precision=0)
+                                    model_save_interval_1 = gr.Number(label="每隔多少 step 验证并保存一次模型", value=1000,
+                                                                     precision=0)
+                                    keep_ckpts_1 = gr.Number(label="保存最近的多少个模型", value=3, precision=0)
+                                    learning_rate_1 = gr.Number(label="学习率(推荐 batch size 1/60000)", value=0.0001, precision=6)
                                 with gr.Row():
                                     load_train_config_btn_1 = gr.Button("加载训练配置")
                                     train_sovits_btn_1 = gr.Button("继续训练 Sovits Model")
@@ -362,11 +362,11 @@ with gr.Blocks() as app:
                                         interactive=True,
                                     )
                                 with gr.Row():
-                                    eval_interval_2 = gr.Textbox(label="每隔多少 step 生成一次评估日志", lines=1)
-                                    model_save_interval_2 = gr.Textbox(label="每隔多少 step 验证并保存一次模型", value="800",
-                                                                     lines=1)
-                                    keep_ckpts_2 = gr.Textbox(label="保存最近的多少个模型", value="5", lines=1)
-                                    learning_rate_2 = gr.Textbox(label="学习率(推荐 batch size 1/60000")
+                                    eval_interval_2 = gr.Number(label="每隔多少 step 生成一次评估日志", value=200, precision=0)
+                                    model_save_interval_2 = gr.Number(label="每隔多少 step 验证并保存一次模型", value=1000,
+                                                                     precision=0)
+                                    keep_ckpts_2 = gr.Number(label="保存最近的多少个模型", value=5, precision=0)
+                                    learning_rate_2 = gr.Number(label="学习率(推荐 batch size 1/60000", value=0.0001, precision=6)
                                 with gr.Row():
                                     train_sovits_btn_2 = gr.Button("训练 Sovits Model")
                                     train_monitor_btn_2 = gr.Button("查看训练日志")
@@ -410,7 +410,7 @@ with gr.Blocks() as app:
                                      [infer_experiment, svc_model, input_audio_file, speaker_name, enhance, auto_f0,
                                       f0_predictor, vc_transform],
                                      [covert_output_file, covert_log])
-                    covert_clear_btn.click(lambda: None, None, [covert_output_file, covert_log])
+                    covert_clear_btn.click(lambda: (None, None), None, [covert_output_file, covert_log])
         with gr.TabItem("训练集管理"):
             d_info = get_dataset_info()
             datasets = gr.Textbox(label="当前数据集", value=d_info, lines=5)
