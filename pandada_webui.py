@@ -87,7 +87,7 @@ def split_dataset(speech_encoder, experiment):
         raise gr.Error("实验名称不能为空")
     result = ["开始 Speech Encode..."]
     yield "\n".join(result)
-    if not Path(f"./filelists/{experiment}").exist():
+    if not Path(f"./filelists/{experiment}").exists():
         Path(f"./filelists/{experiment}").mkdir()
     p = Popen(
         f"python preprocess_flist_config.py "
@@ -97,8 +97,8 @@ def split_dataset(speech_encoder, experiment):
         f"--val_list ./filelists/{experiment}/val.txt",
         shell=True)
     p.wait()
-    if not Path(f"./logs/44/{experiment}").exist():
-        Path(f"./logs/44/{experiment}").mkdir()
+    if not Path(f"./logs/44k/{experiment}").exists():
+        Path(f"./logs/44k/{experiment}").mkdir()
     shutil.copy("./configs/config.json", f"./logs/44k/{experiment}/config.json")
     shutil.copy("./configs/diffusion.yaml", f"./logs/44k/{experiment}/diffusion.yaml")
     result.append("Speech Encode 结束.")
@@ -146,7 +146,7 @@ def train_sovits_model(experiment, total_epoch, batch_size):
     p.wait()
 
 
-def covert_audio(model, experiment, audio_file, speaker, enhance, auto_f0, f0_predictor, vc_transform):
+def covert_audio(experiment, model, audio_file, speaker, enhance, auto_f0, f0_predictor, vc_transform):
     raw_dir = Path("./raw")
     # audio_file = Path(audio_file)
     filename = Path(audio_file.name).name
@@ -200,9 +200,16 @@ def get_models(experiment):
     speaks = [d.name for d in Path(f"./dataset/44k/{experiment}").iterdir() if d.is_dir()]
     return {"choices": models, "__type__": "update"}, {"choices": speaks, "__type__": "update"}
 
+
 def get_experiments():
     experiments = [d.name for d in Path("./logs/44k").iterdir() if d.is_dir()]
     return {"choices": experiments, "__type__": "update"}
+
+
+def load_train_config(experiment):
+    with open(Path(f"./logs/44k/{experiment}/config.json"), mode='r') as f:
+        config = json.load(f)
+    return config["model"]["speech_encoder"], config["train"]["epochs"], config["train"]["batch_size"]
 
 
 with gr.Blocks() as app:
@@ -218,94 +225,145 @@ with gr.Blocks() as app:
     with gr.Tabs():
         with gr.TabItem("训练"):
             with gr.Group():
-                gr.Markdown(value="实验名称设置")
-                with gr.Row():
-                    # with gr.Column():
-                    #     experiments = gr.Dropdown(label="实验列表", info="如果选择实验列表则为继续原来的训练", choices="")
-                    # with gr.Column():
-                    experiment_name = gr.Textbox(label="实验名称", lines=1)
-
-            with gr.Group():
-                gr.Markdown(value="Step 1. Resample to 44100Hz and mono.")
-                with gr.Row():
-                    with gr.Column():
-                        with gr.Row():
-                            resample_btn = gr.Button("Resample")
-                            resample_clear_btn = gr.Button("Clear")
-                    with gr.Column():
-                        resample_out = gr.Textbox(label="Resample 结果", lines=3, max_lines=3)
-                    resample_btn.click(resample_dateset, experiment_name, resample_out)
-                    resample_clear_btn.click(lambda: None, None, resample_out)
-            with gr.Group():
                 gr.Markdown(
-                    value="Step 2. Split the dataset into training and validation sets, and generate configuration files.")
-                with gr.Row():
-                    with gr.Column():
-                        speech_encoder_radio = gr.Radio(
-                            label="选择 Speech Encoder",
-                            choices=["vec768l12", "vec256l9", "hubertsoft", "whisper-ppg"],
-                            value="vec768l12",
-                            interactive=True,
-                        )
+                    value="""
+                    ## SoVITS 训练
+                    - 从已有实验加训
+                    - 新建实验
+                    """)
+            with gr.Tabs():
+                with gr.TabItem("加训"):
+                    with gr.Group():
+                        gr.Markdown(value="实验名称设置")
                         with gr.Row():
-                            speech_encoder_btn = gr.Button("运行")
-                    with gr.Column():
-                        speech_encoder_out = gr.Textbox(label="运行结果", lines=3, max_lines=3)
-                speech_encoder_btn.click(split_dataset, [speech_encoder_radio, experiment_name], speech_encoder_out)
-            with gr.Group():
-                gr.Markdown(value="Step 3. Generate hubert and f0")
-                with gr.Row():
-                    with gr.Column():
-                        f0_predictor_radio = gr.Radio(
-                            label="选择 f0_predictor",
-                            choices=["crepe", "dio", "pm", "harvest"],
-                            value="dio",
-                            interactive=True,
-                        )
+                            train_experiments = gr.Dropdown(label="实验列表", choices="")
+                            train_experiments_refresh_btn = gr.Button("刷新实验列表")
+                            train_experiments_refresh_btn.click(get_experiments, None, train_experiments)
+                    with gr.Group():
+                        gr.Markdown(
+                            value="Step 2. Split the dataset into training and validation sets, and generate configuration files.")
                         with gr.Row():
-                            f0_predictor_btn = gr.Button("运行")
-                    with gr.Column():
-                        f0_predictor_out = gr.Textbox(label="运行结果", lines=3, max_lines=3)
-                f0_predictor_btn.click(f0_predict, f0_predictor_radio, f0_predictor_out)
-            # with gr.Group(visible=False):
-            #     gr.Markdown(value="Step 4. (可选) 训练 Diffusion Model")
-            #     with gr.Row():
-            #         with gr.Column():
-            #             with gr.Row():
-            #                 train_diffusion_btn = gr.Button("训练 Diffusion Model")
-            #                 train_diffusion_clear_btn = gr.Button("清除")
-            #         with gr.Column():
-            #             train_diffusion_out = gr.Textbox(label="Diffusion Model 模型训练结果", lines=5, max_lines=5)
-            #         train_diffusion_btn.click(train_diffusion_model, None, train_diffusion_out)
-            #         train_diffusion_clear_btn.click(lambda: None, None, train_diffusion_out)
-            with gr.Group():
-                gr.Markdown(value="Step 4. 训练 Sovits Model")
-                with gr.Row():
-                    with gr.Column(scale=1):
-                        with gr.Row():
-                            total_epoch = gr.Slider(
-                                minimum=0,
-                                maximum=50000,
-                                step=100,
-                                label="总训练轮数total_epoch",
-                                value=200,
-                                interactive=True,
-                            )
-                            batch_size = gr.Slider(
-                                minimum=1,
-                                maximum=40,
-                                step=1,
-                                label="batch_size",
-                                value=16,
+                            speech_encoder_radio = gr.Radio(
+                                label="选择 Speech Encoder",
+                                choices=["vec768l12", "vec256l9", "hubertsoft", "whisper-ppg"],
+                                value="vec768l12",
                                 interactive=True,
                             )
                         with gr.Row():
-                            train_sovits_btn = gr.Button("训练 Sovits Model")
-                            train_monitor_btn = gr.Button("查看训练日志")
-                    with gr.Column(scale=2):
-                        train_sovits_out = gr.Textbox(label="模型训练结果", lines=10, max_lines=10)
-                    train_sovits_btn.click(train_sovits_model, [experiment_name, total_epoch, batch_size])
-                    train_monitor_btn.click(train_monitor, None, train_sovits_out)
+                            with gr.Column(scale=1):
+                                with gr.Row():
+                                    total_epoch = gr.Slider(
+                                        minimum=0,
+                                        maximum=50000,
+                                        step=100,
+                                        label="总训练轮数total_epoch",
+                                        value=200,
+                                        interactive=True,
+                                    )
+                                    batch_size = gr.Slider(
+                                        minimum=1,
+                                        maximum=40,
+                                        step=1,
+                                        label="batch_size",
+                                        value=16,
+                                        interactive=True,
+                                    )
+                                with gr.Row():
+                                    load_train_config_btn = gr.Button("加载训练配置")
+                                    train_sovits_btn = gr.Button("继续训练 Sovits Model")
+                                    train_monitor_btn = gr.Button("查看训练日志")
+                            with gr.Column(scale=2):
+                                train_sovits_out = gr.Textbox(label="模型训练结果", lines=10, max_lines=10)
+                            load_train_config_btn.click(load_train_config, train_experiments,
+                                                        [speech_encoder_radio, total_epoch, batch_size])
+                            train_sovits_btn.click(train_sovits_model, [train_experiments, total_epoch, batch_size])
+                            train_monitor_btn.click(train_monitor, None, train_sovits_out)
+                with gr.TabItem("新建训练"):
+                    with gr.Group():
+                        gr.Markdown(value="实验名称设置")
+                        experiment_name = gr.Textbox(label="实验名称", lines=1)
+                    with gr.Group():
+                        gr.Markdown(value="Step 1. Resample to 44100Hz and mono.")
+                        with gr.Row():
+                            with gr.Column():
+                                with gr.Row():
+                                    resample_btn = gr.Button("Resample")
+                                    resample_clear_btn = gr.Button("Clear")
+                            with gr.Column():
+                                resample_out = gr.Textbox(label="Resample 结果", lines=3, max_lines=3)
+                            resample_btn.click(resample_dateset, experiment_name, resample_out)
+                            resample_clear_btn.click(lambda: None, None, resample_out)
+                    with gr.Group():
+                        gr.Markdown(
+                            value="Step 2. Split the dataset into training and validation sets, and generate configuration files.")
+                        with gr.Row():
+                            with gr.Column():
+                                speech_encoder_radio = gr.Radio(
+                                    label="选择 Speech Encoder",
+                                    choices=["vec768l12", "vec256l9", "hubertsoft", "whisper-ppg"],
+                                    value="vec768l12",
+                                    interactive=True,
+                                )
+                                with gr.Row():
+                                    speech_encoder_btn = gr.Button("运行")
+                            with gr.Column():
+                                speech_encoder_out = gr.Textbox(label="运行结果", lines=3, max_lines=3)
+                        speech_encoder_btn.click(split_dataset, [speech_encoder_radio, experiment_name],
+                                                 speech_encoder_out)
+                    with gr.Group():
+                        gr.Markdown(value="Step 3. Generate hubert and f0")
+                        with gr.Row():
+                            with gr.Column():
+                                f0_predictor_radio = gr.Radio(
+                                    label="选择 f0_predictor",
+                                    choices=["crepe", "dio", "pm", "harvest"],
+                                    value="dio",
+                                    interactive=True,
+                                )
+                                with gr.Row():
+                                    f0_predictor_btn = gr.Button("运行")
+                            with gr.Column():
+                                f0_predictor_out = gr.Textbox(label="运行结果", lines=3, max_lines=3)
+                        f0_predictor_btn.click(f0_predict, [f0_predictor_radio, experiment_name], f0_predictor_out)
+                    # with gr.Group(visible=False):
+                    #     gr.Markdown(value="Step 4. (可选) 训练 Diffusion Model")
+                    #     with gr.Row():
+                    #         with gr.Column():
+                    #             with gr.Row():
+                    #                 train_diffusion_btn = gr.Button("训练 Diffusion Model")
+                    #                 train_diffusion_clear_btn = gr.Button("清除")
+                    #         with gr.Column():
+                    #             train_diffusion_out = gr.Textbox(label="Diffusion Model 模型训练结果", lines=5, max_lines=5)
+                    #         train_diffusion_btn.click(train_diffusion_model, None, train_diffusion_out)
+                    #         train_diffusion_clear_btn.click(lambda: None, None, train_diffusion_out)
+                    with gr.Group():
+                        gr.Markdown(value="Step 4. 训练 Sovits Model")
+                        with gr.Row():
+                            with gr.Column(scale=1):
+                                with gr.Row():
+                                    total_epoch = gr.Slider(
+                                        minimum=0,
+                                        maximum=50000,
+                                        step=100,
+                                        label="总训练轮数total_epoch",
+                                        value=200,
+                                        interactive=True,
+                                    )
+                                    batch_size = gr.Slider(
+                                        minimum=1,
+                                        maximum=40,
+                                        step=1,
+                                        label="batch_size",
+                                        value=16,
+                                        interactive=True,
+                                    )
+                                with gr.Row():
+                                    train_sovits_btn = gr.Button("训练 Sovits Model")
+                                    train_monitor_btn = gr.Button("查看训练日志")
+                            with gr.Column(scale=2):
+                                train_sovits_out = gr.Textbox(label="模型训练结果", lines=10, max_lines=10)
+                            train_sovits_btn.click(train_sovits_model, [experiment_name, total_epoch, batch_size])
+                            train_monitor_btn.click(train_monitor, None, train_sovits_out)
 
         with gr.TabItem("模型推理"):
             with gr.Group():
@@ -314,10 +372,8 @@ with gr.Blocks() as app:
                         # input_audio_file = gr.Audio(label="添加待转换音频", type="filepath")
                         input_audio_file = gr.File(label="添加待转换音频")
                         with gr.Row():
-                            with gr.Column():
-                                infer_experiment = gr.Dropdown(label="实验名称", choices=[""])
-                            with gr.Column():
-                                infer_refresh_experiment = gr.Button("刷新实验名称")
+                            infer_experiment = gr.Dropdown(label="实验名称", choices=[""])
+                            infer_refresh_experiment = gr.Button("刷新实验名称")
                             infer_refresh_experiment.click(get_experiments, None, infer_experiment)
                         with gr.Row():
                             svc_model = gr.Dropdown(label="SVC 模型", choices=[""])
@@ -342,7 +398,7 @@ with gr.Blocks() as app:
                         covert_output_file = gr.Audio(label="输出音频(右下角三个点,点了可以下载)")
                         covert_log = gr.Textbox(label="音色迁移结果", lines=5, max_lines=5)
                     covert_btn.click(covert_audio,
-                                     [experiment_name, svc_model, input_audio_file, speaker_name, enhance, auto_f0,
+                                     [infer_experiment, svc_model, input_audio_file, speaker_name, enhance, auto_f0,
                                       f0_predictor, vc_transform],
                                      [covert_output_file, covert_log])
                     covert_clear_btn.click(lambda: None, None, [covert_output_file, covert_log])
