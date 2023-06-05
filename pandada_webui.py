@@ -59,14 +59,19 @@ def train_monitor():
         topic, msg = log_queue.get()
         msg = msg.decode().strip()
         print(msg)
-        logs.put(msg)
+        logs.append(msg)
         yield "\n".join(list(logs)[-10:])
 
 
-def resample_dateset(dates):
+def resample_dateset(experiment):
+    if experiment == "":
+        raise gr.Error("实验名称不能为空")
     result = ["开始数据采样..."]
     yield "\n".join(result)
-    p = Popen("python resample.py", shell=True, stdout=PIPE, stderr=PIPE, encoding='utf-8')
+    if not Path(f"./dataset/44k/{experiment}").exists():
+        Path(f"./dataset/44k/{experiment}").mkdir()
+    p = Popen(f"python resample.py --out_dir2 ./dataset/44k/{experiment}", shell=True, stdout=PIPE, stderr=PIPE,
+              encoding='utf-8')
     while True:
         out = p.stdout.readline()
         if out == '' and p.poll() is not None:
@@ -77,47 +82,71 @@ def resample_dateset(dates):
     yield "\n".join(result)
 
 
-def split_dataset(speech_encoder):
+def split_dataset(speech_encoder, experiment):
+    if experiment == "":
+        raise gr.Error("实验名称不能为空")
     result = ["开始 Speech Encode..."]
     yield "\n".join(result)
-    p = Popen(f"python preprocess_flist_config.py --speech_encoder {speech_encoder}", shell=True)
+    if not Path(f"./filelists/{experiment}").exist():
+        Path(f"./filelists/{experiment}").mkdir()
+    p = Popen(
+        f"python preprocess_flist_config.py "
+        f"--source_dir ./dataset/44k/{experiment} "
+        f"--speech_encoder {speech_encoder} "
+        f"--train_list ./filelists/{experiment}/train.txt "
+        f"--val_list ./filelists/{experiment}/val.txt",
+        shell=True)
     p.wait()
+    if not Path(f"./logs/44/{experiment}").exist():
+        Path(f"./logs/44/{experiment}").mkdir()
+    shutil.copy("./configs/config.json", f"./logs/44k/{experiment}/config.json")
+    shutil.copy("./configs/diffusion.yaml", f"./logs/44k/{experiment}/diffusion.yaml")
     result.append("Speech Encode 结束.")
     yield "\n".join(result)
 
 
-def f0_predict(predictor):
+def f0_predict(predictor, experiment):
+    if experiment == "":
+        raise gr.Error("实验名称不能为空")
     result = ["开始 f0 Predict..."]
     yield "\n".join(result)
-    p = Popen(f"python preprocess_hubert_f0.py --f0_predictor {predictor}", shell=True)
+    p = Popen(
+        f"python preprocess_hubert_f0.py "
+        f"--f0_predictor {predictor} "
+        f"--in_dir ./dataset/44k/{experiment}", shell=True)
     p.wait()
     result.append("f0 Predict 结束.")
     yield "\n".join(result)
 
 
-def train_diffusion_model():
+def train_diffusion_model(experiment):
+    if experiment == "":
+        raise gr.Error("实验名称不能为空")
     result = ["开始训练 Diffusion Model..."]
     yield "\n".join(result)
-    p = Popen("python train_diff.py -c configs/diffusion.yaml", shell=True)
+    p = Popen(f"python train_diff.py -c ./logs/44k/{experiment}/diffusion.yaml", shell=True)
     p.wait()
     result.append("训练 Diffusion Model 结束.")
     yield "\n".join(result)
 
 
-def train_sovits_model(total_epoch, batch_size):
-    with open(Path("./configs/config.json"), mode='r') as f:
+def train_sovits_model(experiment, total_epoch, batch_size):
+    with open(Path(f"./logs/44k/{experiment}/config.json"), mode='r') as f:
         config = json.load(f)
     config["train"]["epochs"] = int(total_epoch)
     config["train"]["batch_size"] = int(batch_size)
-    # time_now = datetime.now().strftime("%m-%d_%H-%M-%S")
-    config_file = "config.json"
-    with open(Path(f"./configs/{config_file}"), mode='w') as f:
+    config["data"]["training_files"] = f"filelists/{experiment}/train.txt"
+    config["data"]["validation_files"] = f"filelists/{experiment}/val.txt"
+    with open(Path(f"./logs/44k/{experiment}/config.json"), mode='w') as f:
         json.dump(config, f)
-    p = Popen(f"python train.py -c configs/{config_file} -m 44k", shell=True)
+    p = Popen(
+        f"python train.py "
+        f"-c ./logs/44k/{experiment}/config.json "
+        f"-m 44k/{experiment}", shell=True)
     p.wait()
 
 
-def covert_audio(model, audio_file, speaker, enhance, auto_f0, f0_predictor, vc_transform):
+def covert_audio(model, experiment, audio_file, speaker, enhance, auto_f0, f0_predictor, vc_transform):
     raw_dir = Path("./raw")
     # audio_file = Path(audio_file)
     filename = Path(audio_file.name).name
@@ -126,7 +155,14 @@ def covert_audio(model, audio_file, speaker, enhance, auto_f0, f0_predictor, vc_
         raw_dir.mkdir(parents=True)
     if audio_file is not None:
         shutil.copy(audio_file.name, raw_dir / filename)
-    cmd = f'python inference_main.py -m "logs/44k/{model}.pth" -c "configs/config.json" -n "{filename}" -t {int(vc_transform)} -s {speaker} --wav_format wav --f0_predictor {f0_predictor}'
+    cmd = f'python inference_main.py ' \
+          f'-m "./logs/44k/{experiment}/{model}.pth" ' \
+          f'-c "./logs/44k/{experiment}/config.json" ' \
+          f'-n "{filename}" ' \
+          f'-t {int(vc_transform)} ' \
+          f'-s {speaker} ' \
+          f'--wav_format wav ' \
+          f'--f0_predictor {f0_predictor}'
     if auto_f0:
         cmd = cmd + " --auto_predict_f0"
     if enhance:
@@ -159,9 +195,14 @@ def get_dataset_info():
     return "\n".join([f"Speaker: {d[0]}, 语料数量: {d[1]}" for d in dataset_info])
 
 
-def get_models():
-    models = [pt.stem for pt in Path("./logs/44k").glob('*.pth') if pt.name.startswith("G_")]
-    return {"choices": models, "__type__": "update"}
+def get_models(experiment):
+    models = [pt.stem for pt in Path(f"./logs/44k/{experiment}").glob('*.pth') if pt.name.startswith("G_")]
+    speaks = [d.name for d in Path(f"./dataset/44k/{experiment}").iterdir() if d.is_dir()]
+    return {"choices": models, "__type__": "update"}, {"choices": speaks, "__type__": "update"}
+
+def get_experiments():
+    experiments = [d.name for d in Path("./logs/44k").iterdir() if d.is_dir()]
+    return {"choices": experiments, "__type__": "update"}
 
 
 with gr.Blocks() as app:
@@ -177,6 +218,14 @@ with gr.Blocks() as app:
     with gr.Tabs():
         with gr.TabItem("训练"):
             with gr.Group():
+                gr.Markdown(value="实验名称设置")
+                with gr.Row():
+                    # with gr.Column():
+                    #     experiments = gr.Dropdown(label="实验列表", info="如果选择实验列表则为继续原来的训练", choices="")
+                    # with gr.Column():
+                    experiment_name = gr.Textbox(label="实验名称", lines=1)
+
+            with gr.Group():
                 gr.Markdown(value="Step 1. Resample to 44100Hz and mono.")
                 with gr.Row():
                     with gr.Column():
@@ -185,7 +234,7 @@ with gr.Blocks() as app:
                             resample_clear_btn = gr.Button("Clear")
                     with gr.Column():
                         resample_out = gr.Textbox(label="Resample 结果", lines=3, max_lines=3)
-                    resample_btn.click(resample_dateset, None, resample_out)
+                    resample_btn.click(resample_dateset, experiment_name, resample_out)
                     resample_clear_btn.click(lambda: None, None, resample_out)
             with gr.Group():
                 gr.Markdown(
@@ -202,7 +251,7 @@ with gr.Blocks() as app:
                             speech_encoder_btn = gr.Button("运行")
                     with gr.Column():
                         speech_encoder_out = gr.Textbox(label="运行结果", lines=3, max_lines=3)
-                speech_encoder_btn.click(split_dataset, speech_encoder_radio, speech_encoder_out)
+                speech_encoder_btn.click(split_dataset, [speech_encoder_radio, experiment_name], speech_encoder_out)
             with gr.Group():
                 gr.Markdown(value="Step 3. Generate hubert and f0")
                 with gr.Row():
@@ -255,7 +304,7 @@ with gr.Blocks() as app:
                             train_monitor_btn = gr.Button("查看训练日志")
                     with gr.Column(scale=2):
                         train_sovits_out = gr.Textbox(label="模型训练结果", lines=10, max_lines=10)
-                    train_sovits_btn.click(train_sovits_model, [total_epoch, batch_size])
+                    train_sovits_btn.click(train_sovits_model, [experiment_name, total_epoch, batch_size])
                     train_monitor_btn.click(train_monitor, None, train_sovits_out)
 
         with gr.TabItem("模型推理"):
@@ -264,13 +313,18 @@ with gr.Blocks() as app:
                     with gr.Column():
                         # input_audio_file = gr.Audio(label="添加待转换音频", type="filepath")
                         input_audio_file = gr.File(label="添加待转换音频")
-                        refresh_model_btn = gr.Button("刷新模型")
                         with gr.Row():
-                            # experiments = gr.Dropdown(label="实验名称", choices=[""])
+                            with gr.Column():
+                                infer_experiment = gr.Dropdown(label="实验名称", choices=[""])
+                            with gr.Column():
+                                infer_refresh_experiment = gr.Button("刷新实验名称")
+                            infer_refresh_experiment.click(get_experiments, None, infer_experiment)
+                        with gr.Row():
                             svc_model = gr.Dropdown(label="SVC 模型", choices=[""])
-                            speakers = [f.name for f in Path("./dataset/44k").iterdir() if f.is_dir()]
-                            speaker_name = gr.Dropdown(speakers, label="转换目标Speaker(文件夹 dataset_raw 中的子文件夹)")
-                            refresh_model_btn.click(get_models, None, svc_model)
+                            speaker_name = gr.Dropdown(label="转换目标Speaker(文件夹 dataset_raw 中的子文件夹)",
+                                                       choices=[""])
+                            refresh_model_btn = gr.Button("刷新模型")
+                            refresh_model_btn.click(get_models, [infer_experiment], [svc_model, speaker_name])
                         enhance = gr.Checkbox(
                             label="是否使用NSF_HIFIGAN增强,该选项对部分训练集少的模型有一定的音质增强效果，但是对训练好的模型有反面效果，默认关闭",
                             value=False)
@@ -287,7 +341,9 @@ with gr.Blocks() as app:
                     with gr.Column():
                         covert_output_file = gr.Audio(label="输出音频(右下角三个点,点了可以下载)")
                         covert_log = gr.Textbox(label="音色迁移结果", lines=5, max_lines=5)
-                    covert_btn.click(covert_audio, [svc_model, input_audio_file, speaker_name, enhance, auto_f0, f0_predictor, vc_transform],
+                    covert_btn.click(covert_audio,
+                                     [experiment_name, svc_model, input_audio_file, speaker_name, enhance, auto_f0,
+                                      f0_predictor, vc_transform],
                                      [covert_output_file, covert_log])
                     covert_clear_btn.click(lambda: None, None, [covert_output_file, covert_log])
         with gr.TabItem("训练集管理"):
@@ -305,6 +361,6 @@ if __name__ == '__main__':
         server_name="0.0.0.0",
         server_port=7866,
         quiet=True,
-        # root_path="./"
+        # root_path="/sovits"
     )
     collector.join()
