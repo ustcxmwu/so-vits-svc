@@ -16,6 +16,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from subprocess import Popen, PIPE
+from collections import deque
 
 now_dir = os.getcwd()
 sys.path.append(now_dir)
@@ -53,13 +54,13 @@ log_queue = Queue()
 
 
 def train_monitor():
-    logs = []
+    logs = deque(maxlen=100)
     while True:
         topic, msg = log_queue.get()
         msg = msg.decode().strip()
         print(msg)
-        logs.append(msg)
-        yield "\n".join(logs[-10:])
+        logs.put(msg)
+        yield "\n".join(list(logs)[-10:])
 
 
 def resample_dateset(dates):
@@ -116,7 +117,7 @@ def train_sovits_model(total_epoch, batch_size):
     p.wait()
 
 
-def covert_audio(model, audio_file, speaker):
+def covert_audio(model, audio_file, speaker, enhance, auto_f0, f0_predictor, vc_transform):
     raw_dir = Path("./raw")
     # audio_file = Path(audio_file)
     filename = Path(audio_file.name).name
@@ -125,7 +126,12 @@ def covert_audio(model, audio_file, speaker):
         raw_dir.mkdir(parents=True)
     if audio_file is not None:
         shutil.copy(audio_file.name, raw_dir / filename)
-    cmd = f'python inference_main.py -m "logs/44k/{model}.pth" -c "configs/config.json" -n "{filename}" -t 0 -s {speaker} --wav_format wav'
+    cmd = f'python inference_main.py -m "logs/44k/{model}.pth" -c "configs/config.json" -n "{filename}" -t {int(vc_transform)} -s {speaker} --wav_format wav --f0_predictor {f0_predictor}'
+    if auto_f0:
+        cmd = cmd + " --auto_predict_f0"
+    if enhance:
+        cmd = cmd + " --enhance"
+
     result = ["开始音色迁移..."]
     yield None, "\n".join(result)
     p = Popen(cmd, shell=True)
@@ -260,17 +266,28 @@ with gr.Blocks() as app:
                         input_audio_file = gr.File(label="添加待转换音频")
                         refresh_model_btn = gr.Button("刷新模型")
                         with gr.Row():
+                            # experiments = gr.Dropdown(label="实验名称", choices=[""])
                             svc_model = gr.Dropdown(label="SVC 模型", choices=[""])
                             speakers = [f.name for f in Path("./dataset/44k").iterdir() if f.is_dir()]
                             speaker_name = gr.Dropdown(speakers, label="转换目标Speaker(文件夹 dataset_raw 中的子文件夹)")
                             refresh_model_btn.click(get_models, None, svc_model)
+                        enhance = gr.Checkbox(
+                            label="是否使用NSF_HIFIGAN增强,该选项对部分训练集少的模型有一定的音质增强效果，但是对训练好的模型有反面效果，默认关闭",
+                            value=False)
+                        auto_f0 = gr.Checkbox(
+                            label="自动f0预测，配合聚类模型f0预测效果更好,会导致变调功能失效（仅限转换语音，歌声勾选此项会究极跑调）",
+                            value=False)
+                        f0_predictor = gr.Dropdown(
+                            label="选择F0预测器,可选择crepe,pm,dio,harvest,默认为pm(注意：crepe为原F0使用均值滤波器)",
+                            choices=["pm", "dio", "harvest", "crepe"], value="pm")
+                        vc_transform = gr.Number(label="变调（整数，可以正负，半音数量，升高八度就是12）", value=0)
                         with gr.Row():
                             covert_btn = gr.Button("转换", variant="primary")
                             covert_clear_btn = gr.Button("清除", variant="primary")
                     with gr.Column():
                         covert_output_file = gr.Audio(label="输出音频(右下角三个点,点了可以下载)")
                         covert_log = gr.Textbox(label="音色迁移结果", lines=5, max_lines=5)
-                    covert_btn.click(covert_audio, [svc_model, input_audio_file, speaker_name],
+                    covert_btn.click(covert_audio, [svc_model, input_audio_file, speaker_name, enhance, auto_f0, f0_predictor, vc_transform],
                                      [covert_output_file, covert_log])
                     covert_clear_btn.click(lambda: None, None, [covert_output_file, covert_log])
         with gr.TabItem("训练集管理"):
