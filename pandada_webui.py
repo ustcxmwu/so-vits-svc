@@ -130,11 +130,15 @@ def train_diffusion_model(experiment):
     yield "\n".join(result)
 
 
-def train_sovits_model(experiment, total_epoch, batch_size):
+def train_sovits_model(experiment, total_epoch, batch_size, eval_log, model_save_freq, model_save_cnt, learning_rate):
     with open(Path(f"./logs/44k/{experiment}/config.json"), mode='r') as f:
         config = json.load(f)
     config["train"]["epochs"] = int(total_epoch)
     config["train"]["batch_size"] = int(batch_size)
+    config["train"]["log_interval"] = int(eval_log)
+    config["train"]["eval_interval"] = int(model_save_freq)
+    config["train"]["keep_ckpts"] = int(model_save_cnt)
+    config["train"]["learning_rate"] = float(learning_rate)
     config["data"]["training_files"] = f"filelists/{experiment}/train.txt"
     config["data"]["validation_files"] = f"filelists/{experiment}/val.txt"
     with open(Path(f"./logs/44k/{experiment}/config.json"), mode='w') as f:
@@ -209,7 +213,9 @@ def get_experiments():
 def load_train_config(experiment):
     with open(Path(f"./logs/44k/{experiment}/config.json"), mode='r') as f:
         config = json.load(f)
-    return config["model"]["speech_encoder"], config["train"]["epochs"], config["train"]["batch_size"]
+    return config["model"]["speech_encoder"], config["train"]["epochs"], config["train"]["batch_size"], config["train"][
+        "log_interval"], config["train"]["eval_interval"], config["train"]["keep_ckpts"], config["train"][
+        "learning_rate"]
 
 
 with gr.Blocks() as app:
@@ -234,56 +240,54 @@ with gr.Blocks() as app:
             with gr.Tabs():
                 with gr.TabItem("加训"):
                     with gr.Group():
-                        gr.Markdown(value="实验名称设置")
+                        gr.Markdown(value="Step 1. 实验名称设置")
                         with gr.Row():
                             train_experiments = gr.Dropdown(label="实验列表", choices="")
                             train_experiments_refresh_btn = gr.Button("刷新实验列表")
                             train_experiments_refresh_btn.click(get_experiments, None, train_experiments)
                     with gr.Group():
-                        gr.Markdown(
-                            value="Step 2. Split the dataset into training and validation sets, and generate configuration files.")
                         with gr.Row():
-                            speech_encoder_radio = gr.Radio(
-                                label="选择 Speech Encoder",
-                                choices=["vec768l12", "vec256l9", "hubertsoft", "whisper-ppg"],
-                                value="vec768l12",
-                                interactive=True,
-                            )
-                        with gr.Row():
+                            with gr.Column():
+                                gr.Markdown(
+                                    value="Step 2. 加载训练配置并训练.")
+                                with gr.Row():
+                                    speech_encoder_radio = gr.Radio(
+                                        label="选择 Speech Encoder",
+                                        choices=["vec768l12", "vec256l9", "hubertsoft", "whisper-ppg"],
+                                        value="vec768l12",
+                                        interactive=False,
+                                    )
+                                with gr.Row():
+                                    total_epoch_1 = gr.Slider(minimum=0, maximum=50000, step=100,
+                                                            label="总训练轮数total_epoch", value=200,
+                                                            interactive=True, )
+                                    batch_size_1 = gr.Slider(minimum=1, maximum=40, step=1, label="batch_size", value=16,
+                                                           interactive=True, )
+                                with gr.Row():
+                                    eval_interval_1 = gr.Textbox(label="每隔多少 step 生成一次评估日志", lines=1)
+                                    model_save_interval_1 = gr.Textbox(label="每隔多少 step 验证并保存一次模型", value="800",
+                                                                     lines=1)
+                                    keep_ckpts_1 = gr.Textbox(label="保存最近的多少个模型", value="5", lines=1)
+                                    learning_rate_1 = gr.Textbox(label="学习率(推荐 batch size 1/60000)")
+                                with gr.Row():
+                                    load_train_config_btn_1 = gr.Button("加载训练配置")
+                                    train_sovits_btn_1 = gr.Button("继续训练 Sovits Model")
+                                    train_monitor_btn_1 = gr.Button("查看训练日志")
                             with gr.Column(scale=1):
-                                with gr.Row():
-                                    total_epoch = gr.Slider(
-                                        minimum=0,
-                                        maximum=50000,
-                                        step=100,
-                                        label="总训练轮数total_epoch",
-                                        value=200,
-                                        interactive=True,
-                                    )
-                                    batch_size = gr.Slider(
-                                        minimum=1,
-                                        maximum=40,
-                                        step=1,
-                                        label="batch_size",
-                                        value=16,
-                                        interactive=True,
-                                    )
-                                with gr.Row():
-                                    load_train_config_btn = gr.Button("加载训练配置")
-                                    train_sovits_btn = gr.Button("继续训练 Sovits Model")
-                                    train_monitor_btn = gr.Button("查看训练日志")
-                            with gr.Column(scale=2):
-                                train_sovits_out = gr.Textbox(label="模型训练结果", lines=10, max_lines=10)
-                            load_train_config_btn.click(load_train_config, train_experiments,
-                                                        [speech_encoder_radio, total_epoch, batch_size])
-                            train_sovits_btn.click(train_sovits_model, [train_experiments, total_epoch, batch_size])
-                            train_monitor_btn.click(train_monitor, None, train_sovits_out)
+                                train_sovits_out_1 = gr.Textbox(label="模型训练结果", lines=10, max_lines=10)
+                            load_train_config_btn_1.click(load_train_config, train_experiments,
+                                                        [speech_encoder_radio, total_epoch_1, batch_size_1, eval_interval_1,
+                                                         model_save_interval_1, keep_ckpts_1, learning_rate_1])
+                            train_sovits_btn_1.click(train_sovits_model,
+                                                   [train_experiments, total_epoch_1, batch_size_1, eval_interval_1,
+                                                    model_save_interval_1, keep_ckpts_1, learning_rate_1])
+                            train_monitor_btn_1.click(train_monitor, None, train_sovits_out_1)
                 with gr.TabItem("新建训练"):
                     with gr.Group():
-                        gr.Markdown(value="实验名称设置")
+                        gr.Markdown(value="Step 1. 实验名称设置")
                         experiment_name = gr.Textbox(label="实验名称", lines=1)
                     with gr.Group():
-                        gr.Markdown(value="Step 1. Resample to 44100Hz and mono.")
+                        gr.Markdown(value="Step 2. 重采样至单声道 44100Hz.")
                         with gr.Row():
                             with gr.Column():
                                 with gr.Row():
@@ -295,7 +299,7 @@ with gr.Blocks() as app:
                             resample_clear_btn.click(lambda: None, None, resample_out)
                     with gr.Group():
                         gr.Markdown(
-                            value="Step 2. Split the dataset into training and validation sets, and generate configuration files.")
+                            value="Step 3. 拆分训练集, 验证集并生成训练配置文件.")
                         with gr.Row():
                             with gr.Column():
                                 speech_encoder_radio = gr.Radio(
@@ -311,7 +315,7 @@ with gr.Blocks() as app:
                         speech_encoder_btn.click(split_dataset, [speech_encoder_radio, experiment_name],
                                                  speech_encoder_out)
                     with gr.Group():
-                        gr.Markdown(value="Step 3. Generate hubert and f0")
+                        gr.Markdown(value="Step 4. 生成 hubert 和 f0")
                         with gr.Row():
                             with gr.Column():
                                 f0_predictor_radio = gr.Radio(
@@ -337,11 +341,11 @@ with gr.Blocks() as app:
                     #         train_diffusion_btn.click(train_diffusion_model, None, train_diffusion_out)
                     #         train_diffusion_clear_btn.click(lambda: None, None, train_diffusion_out)
                     with gr.Group():
-                        gr.Markdown(value="Step 4. 训练 Sovits Model")
+                        gr.Markdown(value="Step 5. 训练 Sovits Model")
                         with gr.Row():
                             with gr.Column(scale=1):
                                 with gr.Row():
-                                    total_epoch = gr.Slider(
+                                    total_epoch_2 = gr.Slider(
                                         minimum=0,
                                         maximum=50000,
                                         step=100,
@@ -349,7 +353,7 @@ with gr.Blocks() as app:
                                         value=200,
                                         interactive=True,
                                     )
-                                    batch_size = gr.Slider(
+                                    batch_size_2 = gr.Slider(
                                         minimum=1,
                                         maximum=40,
                                         step=1,
@@ -358,18 +362,23 @@ with gr.Blocks() as app:
                                         interactive=True,
                                     )
                                 with gr.Row():
-                                    train_sovits_btn = gr.Button("训练 Sovits Model")
-                                    train_monitor_btn = gr.Button("查看训练日志")
-                            with gr.Column(scale=2):
-                                train_sovits_out = gr.Textbox(label="模型训练结果", lines=10, max_lines=10)
-                            train_sovits_btn.click(train_sovits_model, [experiment_name, total_epoch, batch_size])
-                            train_monitor_btn.click(train_monitor, None, train_sovits_out)
+                                    eval_interval_2 = gr.Textbox(label="每隔多少 step 生成一次评估日志", lines=1)
+                                    model_save_interval_2 = gr.Textbox(label="每隔多少 step 验证并保存一次模型", value="800",
+                                                                     lines=1)
+                                    keep_ckpts_2 = gr.Textbox(label="保存最近的多少个模型", value="5", lines=1)
+                                    learning_rate_2 = gr.Textbox(label="学习率(推荐 batch size 1/60000")
+                                with gr.Row():
+                                    train_sovits_btn_2 = gr.Button("训练 Sovits Model")
+                                    train_monitor_btn_2 = gr.Button("查看训练日志")
+                            with gr.Column(scale=1):
+                                train_sovits_out_2 = gr.Textbox(label="模型训练结果", lines=10, max_lines=10)
+                            train_sovits_btn_2.click(train_sovits_model, [experiment_name, total_epoch_2, batch_size_2, eval_interval_2, model_save_interval_2, keep_ckpts_2, learning_rate_2])
+                            train_monitor_btn_2.click(train_monitor, None, train_sovits_out_2)
 
         with gr.TabItem("模型推理"):
             with gr.Group():
                 with gr.Row():
                     with gr.Column():
-                        # input_audio_file = gr.Audio(label="添加待转换音频", type="filepath")
                         input_audio_file = gr.File(label="添加待转换音频")
                         with gr.Row():
                             infer_experiment = gr.Dropdown(label="实验名称", choices=[""])
