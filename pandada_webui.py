@@ -258,7 +258,7 @@ with gr.Blocks() as app:
                                         interactive=False,
                                     )
                                 with gr.Row():
-                                    total_epoch_1 = gr.Slider(minimum=0, maximum=50000, step=100,
+                                    total_epoch_1 = gr.Slider(minimum=0, maximum=100000, step=100,
                                                             label="总训练轮数total_epoch", value=200,
                                                             interactive=True, )
                                     batch_size_1 = gr.Slider(minimum=1, maximum=40, step=1, label="batch_size", value=16,
@@ -347,7 +347,7 @@ with gr.Blocks() as app:
                                 with gr.Row():
                                     total_epoch_2 = gr.Slider(
                                         minimum=0,
-                                        maximum=50000,
+                                        maximum=100000,
                                         step=100,
                                         label="总训练轮数total_epoch",
                                         value=200,
