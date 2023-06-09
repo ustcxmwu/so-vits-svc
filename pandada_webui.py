@@ -159,6 +159,9 @@ def covert_audio(experiment, model, audio_file, speaker, enhance, auto_f0, f0_pr
         raw_dir.mkdir(parents=True)
     if audio_file is not None:
         shutil.copy(audio_file.name, raw_dir / filename)
+    target_file = Path(get_target_file_name(filename, auto_f0, vc_transform, speaker))
+    if target_file.exists():
+        target_file.unlink()
     cmd = f'python inference_main.py ' \
           f'-m "./logs/44k/{experiment}/{model}.pth" ' \
           f'-c "./logs/44k/{experiment}/config.json" ' \
@@ -172,12 +175,25 @@ def covert_audio(experiment, model, audio_file, speaker, enhance, auto_f0, f0_pr
     if enhance:
         cmd = cmd + " --enhance"
 
-    result = ["开始音色迁移..."]
+    result = [f"源文件{filename}开始音色迁移..."]
     yield None, "\n".join(result)
     p = Popen(cmd, shell=True)
     p.wait()
-    result.append("结束音色迁移, 请查看转换后文件.")
-    yield str(Path("./results") / f"{filename}_{int(vc_transform)}key_{speaker}_sovits.wav"), "\n".join(result)
+    result.append(f"结束音色迁移, 请查看转换后文件 {str(target_file)}.")
+    # yield str(Path("./results") / f"{filename}_{int(vc_transform)}key_{speaker}_sovits.wav"), "\n".join(result)
+    yield get_target_file_name(filename, auto_f0, vc_transform, speaker), "\n".join(result)
+
+
+def get_target_file_name(filename, auto_f0, tran, speak):
+    key = "auto" if auto_f0 else f"{int(tran)}key"
+    # cluster_name = "" if cluster_infer_ratio == 0 else f"_{cluster_infer_ratio}"
+    cluster_name = ""
+    isdiffusion = "sovits"
+    # if shallow_diffusion: isdiffusion = "sovdiff"
+    # if only_diffusion: isdiffusion = "diff"
+    if type(speak) != type('aa'):
+        spk = "spk_mix"
+    return f'./results/{filename}_{key}_{speak}{cluster_name}_{isdiffusion}.wav'
 
 
 def upload_dataset(upload, dataset_name):
