@@ -69,7 +69,7 @@ def resample_dateset(experiment):
     result = ["开始数据采样..."]
     yield "\n".join(result)
     if not Path(f"./dataset/44k/{experiment}").exists():
-        Path(f"./dataset/44k/{experiment}").mkdir()
+        Path(f"./dataset/44k/{experiment}").mkdir(parents=True)
     p = Popen(f"python resample.py --out_dir2 ./dataset/44k/{experiment}", shell=True, stdout=PIPE, stderr=PIPE,
               encoding='utf-8')
     while True:
@@ -88,7 +88,7 @@ def split_dataset(speech_encoder, experiment):
     result = ["开始 Speech Encode..."]
     yield "\n".join(result)
     if not Path(f"./filelists/{experiment}").exists():
-        Path(f"./filelists/{experiment}").mkdir()
+        Path(f"./filelists/{experiment}").mkdir(parents=True)
     p = Popen(
         f"python preprocess_flist_config.py "
         f"--source_dir ./dataset/44k/{experiment} "
@@ -98,7 +98,7 @@ def split_dataset(speech_encoder, experiment):
         shell=True)
     p.wait()
     if not Path(f"./logs/44k/{experiment}").exists():
-        Path(f"./logs/44k/{experiment}").mkdir()
+        Path(f"./logs/44k/{experiment}").mkdir(parents=True)
     shutil.copy("./configs/config.json", f"./logs/44k/{experiment}/config.json")
     shutil.copy("./configs/diffusion.yaml", f"./logs/44k/{experiment}/diffusion.yaml")
     result.append("Speech Encode 结束.")
